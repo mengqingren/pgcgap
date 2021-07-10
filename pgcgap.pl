@@ -13,7 +13,7 @@ use File::Basename;
 use POSIX;
 use Sys::Info;
 use Sys::Info::Constants qw( :device_cpu );
-
+use File::Copy::Recursive qw(fcopy rcopy dircopy fmove rmove dirmove);
 
 my %options;
 
@@ -79,6 +79,18 @@ Check if all of the required external programs can be found and are executable, 
 =cut
 
 $options{'check-external-programs'} = \( my $opt_check_external_programs = 0 );
+
+=over 30
+
+=item B<[--check-update]>
+
+Check if there is a new version of PGCGAP that can be upgraded
+
+=back
+
+=cut
+
+$options{'check-update'} = \( my $opt_check_update = 0 );
 
 =over 30
 
@@ -336,7 +348,7 @@ $options{'reads2=s'} = \(my $opt_reads2);
 
 =item B<[--Scaf_suffix (STRING)]>
 
-The suffix of scaffolds or genomes [Required by "All", "Assess", "Annotate", "MASH", "ANI" and "AntiRes"] Here, "-8.fa" for Illumina data, ".contigs.fasta" for PacBio data and Oxford data. Users can also fill in other suffixes according to the actual situation ( Default -8.fa )
+The suffix of scaffolds or genome files [Required by "All", "Assess", "Annotate", "MASH", "ANI" and "AntiRes"]. This is an important parameter that must be set ( Default -8.fa )
 
 =back
 
@@ -414,6 +426,30 @@ Name of the log file ( Default Logs.txt )
 =cut
 
 $options{'logs=s'} = \( my $opt_logs = "Logs.txt" );
+
+=over 30
+
+=item B<[--fasttree]>
+
+I<[Can be used with "CoreTree", "Pan" and "OrthoF"]> Use FastTree to construct phylogenetic tree quickly instead of IQ-TREE.
+
+=back
+
+=cut
+
+$options{'fasttree'} = \(my $opt_fasttree);
+
+=over 30
+
+=item B<[--bsnum (INT)]>
+
+I<[Required by "CoreTree", "Pan", "OrthoF", "STREE", and "VAR"]> Replicates for bootstrap of IQ-TREE. ( Default 500 )
+
+=back
+
+=cut
+
+$options{'bsnum=i'} = \( my $opt_bsnum = "500");
 
 =over 30
 
@@ -773,6 +809,18 @@ Construct a phylogenetic tree of single-copy core proteins called by roary
 
 $options{'PanTree'} = \(my $opt_PanTree);
 
+=over 30
+
+=item B<[--identi (INT)]>
+
+Minimum percentage identity for blastp ( Default 95 )
+
+=back
+
+=cut
+
+$options{'identi=i'} = \(my $opt_identi = "95");
+
 =head3 ========================== Options for "--OrthoF" analysis ============================================
 
 =for text
@@ -793,13 +841,13 @@ If you use the results of "--OrthoF" function in your work, please also cite:
 
 =item B<[--Sprogram (STRING)]>
 
-Sequence search program, Options: blast, mmseqs, blast_gz, diamond ( Default blast )
+Sequence search program, Options: blast, mmseqs, blast_gz, diamond ( Default diamond )
 
 =back
 
 =cut
 
-$options{'Sprogram=s'} = \( my $opt_Sprogram = "blast" );
+$options{'Sprogram=s'} = \( my $opt_Sprogram = "diamond" );
 
 =head3 ========================== Options for "--ANI" analysis ===============================================
 
@@ -840,18 +888,6 @@ I<[Required]> The file containing full paths to reference genomes, one per line.
 =cut
 
 $options{'refL=s'} = \( my $opt_refL = "scaf.list" );
-
-=over 30
-
-=item B<[--ANIO (FILE)]>
-
-The name of output file ( Default "Results/ANI/ANIs" )
-
-=back
-
-=cut
-
-$options{'ANIO=s'} = \( my $opt_ANIO = "Results/ANI/ANIs" );
 
 =head3 ========================== Options for "--VAR" analysis ===============================================
 
@@ -1062,18 +1098,6 @@ Type Of Sequence (p, d, c for Protein, DNA, Codons, respectively). ( Default p )
 =cut
 
 $options{'seqtype=s'} = \( my $opt_seqtype = "p");
-
-=over 30
-
-=item B<[--bsnum (INT)]>
-
-Times for bootstrap. ( Default 1000 )
-
-=back
-
-=cut
-
-$options{'bsnum=i'} = \( my $opt_bsnum = "1000");
 
 =head3 ========================== Options for "--ACC" ========================================================
 
@@ -1303,30 +1327,6 @@ $options{'unicycler-bin=s'} = \( my $opt_unicycler_bin = `which unicycler 2>/dev
 
 =over 30
 
-=item B<[--modeltest-ng-bin (PATH)]>
-
-Path to modeltest-ng binary file. Default tries if modeltest-ng is in PATH;
-
-=back
-
-=cut
-
-$options{'modeltest-ng-bin=s'} = \( my $opt_modeltestng_bin = `which modeltest-ng 2>/dev/null` );
-
-=over 30
-
-=item B<[--raxml-ng-bin (PATH)]>
-
-Path to raxml-ng binary file. Default tries if raxml-ng is in PATH;
-
-=back
-
-=cut
-
-$options{'raxml-ng-bin=s'} = \( my $opt_raxmlng_bin = `which raxml-ng 2>/dev/null` );
-
-=over 30
-
 =item B<[--muscle-bin (PATH)]>
 
 Path to nuscle binary file. Default tries if muscle in PATH;
@@ -1339,15 +1339,15 @@ $options{'muscle-bin=s'} = \( my $opt_muscle_bin = `which muscle 2>/dev/null` );
 
 =over 30
 
-=item B<[--Gblocks-bin (PATH)]>
+=item B<[--trimAL-bin (PATH)]>
 
-Path to Gblocks binary file. Default tries if Gblocks is in PATH;
+Path to trimAL binary file. Default tries if trimAL is in PATH;
 
 =back
 
 =cut
 
-$options{'Gblocks-bin=s'} = \( my $opt_Gblocks_bin = `which Gblocks 2>/dev/null` );
+$options{'trimAL-bin=s'} = \( my $opt_trimAL_bin = `which trimal 2>/dev/null` );
 
 =over 30
 
@@ -1380,7 +1380,7 @@ $options{'iqtree-bin=s'} = \( my $opt_iqtree_bin = `which iqtree 2>/dev/null` );
 
   Contact: liaochenlanruo@webmail.hzau.edu.cn
 
-  Citation: Liu H, Xin B, Zheng J, Zhong H, Yu Y, Peng D, Sun M. Build a bioinformatics analysis platform and apply it to routine analysis of microbial genomics and comparative genomics. Protocol exchange, 2020. DOI: 10.21203/rs.2.21224/v2
+  Citation: Liu H, Xin B, Zheng J, Zhong H, Yu Y, Peng D, Sun M. Build a bioinformatic analysis platform and apply it to routine analysis of microbial genomics and comparative genomics. Protocol exchange, 2021. DOI: 10.21203/rs.2.21224/v5
 
 =end text
 
@@ -1393,22 +1393,22 @@ if ($opt_All or $opt_Assemble or $opt_Annotate or $opt_CoreTree or $opt_Pan or $
 GetOptions(%options) or pod2usage("Try '$0 --help' for more information.");
 
 if($opt_version){
-    print "PGCGAP version: 1.0.17\n";
-    exit 0;
+	print "PGCGAP version: 1.0.31\n";
+	print "Enter the command 'pgcgap --check-update' to check if there is a new version, and update to the new version if it exists.\n";
+	exit 0;
 }
 
-#pod2usage( -verbose => 1 ) if $opt_help;
 if ($opt_help) {
 	pod2usage(1);
 	exit(0);
 }
-#pod2usage(1) if ($opt_help);
-#pod2usage(1) if ($#ARGV == -1);
-chomp($opt_sickle_bin, $opt_snippy_bin, $opt_gubbins_bin, $opt_abyss_bin, $opt_canu_bin, $opt_prodigal_bin, $opt_prokka_bin, $opt_cdhit_bin, $opt_mafft_bin, $opt_modeltestng_bin, $opt_snpsites_bin, $opt_pal2nal_bin, $opt_roary_bin, $opt_orthofinder_bin, $opt_fastANI_bin, $opt_mash_bin, $opt_abricate_bin, $opt_unicycler_bin, $opt_raxmlng_bin, $opt_muscle_bin, $opt_Gblocks_bin, $opt_iqtree_bin);
+
+
+chomp($opt_sickle_bin, $opt_snippy_bin, $opt_gubbins_bin, $opt_abyss_bin, $opt_canu_bin, $opt_prodigal_bin, $opt_prokka_bin, $opt_cdhit_bin, $opt_mafft_bin, $opt_snpsites_bin, $opt_pal2nal_bin, $opt_roary_bin, $opt_orthofinder_bin, $opt_fastANI_bin, $opt_mash_bin, $opt_abricate_bin, $opt_unicycler_bin, $opt_muscle_bin, $opt_trimAL_bin, $opt_iqtree_bin);
 check_external_programs() if($opt_check_external_programs);
+check_update() if ($opt_check_update);
 pod2usage( -msg => 'cd-hit not in $PATH and binary not specified use --cd-hit-bin', -verbose => 0, -exitval => 1 ) unless ($opt_cdhit_bin);
 pod2usage( -msg => 'mafft not in $PATH and binary not specified use --mafft-bin', -verbose => 0, -exitval => 1 ) unless ($opt_mafft_bin);
-pod2usage( -msg => 'modeltest-ng not in $PATH and binary not specified use --modeltestng-bin', -verbose => 0, -exitval => 1 ) unless ($opt_modeltestng_bin);
 pod2usage( -msg => 'snp-sites not in $PATH and binary not specified use --snp-sites-bin', -verbose => 0, -exitval => 1 ) unless ($opt_snpsites_bin);
 pod2usage( -msg => 'abyss not in $PATH and binary not specified use --abyss-bin', -verbose => 0, -exitval => 1 ) unless ($opt_abyss_bin);
 pod2usage( -msg => 'canu not in $PATH and binary not specified use --canu-bin', -verbose => 0, -exitval => 1 ) unless ($opt_canu_bin);
@@ -1424,14 +1424,13 @@ pod2usage( -msg => 'sickle not in $PATH and binary not specified use --sickle-bi
 pod2usage( -msg => 'mash not in $PATH and binary not specified use --mash-bin', -verbose => 0, -exitval => 1 ) unless ($opt_mash_bin);
 pod2usage( -msg => 'abricate not in $PATH and binary not specified use --abricate-bin', -verbose => 0, -exitval => 1 ) unless ($opt_abricate_bin);
 pod2usage( -msg => 'unicycler not in $PATH and binary not specified use --unicycler-bin', -verbose => 0, -exitval => 1 ) unless ($opt_unicycler_bin);
-pod2usage( -msg => 'raxml-ng not in $PATH and binary not specified use --raxmlng-bin', -verbose => 0, -exitval => 1 ) unless ($opt_raxmlng_bin);
 pod2usage( -msg => 'muscle not in $PATH and binary not specified use --muscle-bin', -verbose => 0, -exitval => 1 ) unless ($opt_muscle_bin);
-pod2usage( -msg => 'Gblocks not in $PATH and binary not specified use --Gblocks-bin', -verbose => 0, -exitval => 1 ) unless ($opt_Gblocks_bin);
+pod2usage( -msg => 'trimAL not in $PATH and binary not specified use --trimAL-bin', -verbose => 0, -exitval => 1 ) unless ($opt_trimAL_bin);
 pod2usage( -msg => 'iqtree not in $PATH and binary not specified use --iqtree-bin', -verbose => 0, -exitval => 1 ) unless ($opt_iqtree_bin);
 
 
 sub check_external_programs{
-	my %programs = ("snippy" => $opt_snippy_bin, "gubbins" => $opt_gubbins_bin, "abyss" => $opt_abyss_bin, "canu" => $opt_canu_bin, "prodigal" => $opt_prodigal_bin, "prokka" => $opt_prokka_bin, "cd-hit" => $opt_cdhit_bin, "mafft" => $opt_mafft_bin, "modeltest-ng" => $opt_modeltestng_bin, "snp-sites" => $opt_snpsites_bin, "pal2nal" => $opt_pal2nal_bin, "roary" => $opt_roary_bin, "orthofinder" => $opt_orthofinder_bin, "fastANI" => $opt_fastANI_bin, "mash" => $opt_mash_bin, "abricate" => $opt_abricate_bin, "unicycler" => $opt_unicycler_bin, "raxml-ng" => $opt_raxmlng_bin, "muscle" => $opt_muscle_bin, "Gblocks" => $opt_Gblocks_bin, "iqtree" => $opt_iqtree_bin);
+	my %programs = ("snippy" => $opt_snippy_bin, "gubbins" => $opt_gubbins_bin, "abyss" => $opt_abyss_bin, "canu" => $opt_canu_bin, "prodigal" => $opt_prodigal_bin, "prokka" => $opt_prokka_bin, "cd-hit" => $opt_cdhit_bin, "mafft" => $opt_mafft_bin, "snp-sites" => $opt_snpsites_bin, "pal2nal" => $opt_pal2nal_bin, "roary" => $opt_roary_bin, "orthofinder" => $opt_orthofinder_bin, "fastANI" => $opt_fastANI_bin, "mash" => $opt_mash_bin, "abricate" => $opt_abricate_bin, "unicycler" => $opt_unicycler_bin, "muscle" => $opt_muscle_bin, "trimAL" => $opt_trimAL_bin, "iqtree" => $opt_iqtree_bin);
 	my $fail = 0;
 	foreach my $p (sort keys %programs){
 		my $path = $programs{$p};
@@ -1445,6 +1444,27 @@ sub check_external_programs{
 	exit($fail);
 }
 
+
+sub check_update{
+	my $search = `pgcgap --version`;
+	$search=~/PGCGAP version: (\S+)/;
+	my $current_version = $1;
+	if (my $version_conda=`conda search pgcgap`) {
+		my @lines = split /\n/, $version_conda;
+		$lines[-1]=~/pgcgap\s+(\S+).+/;
+		my $latest_version = $1;
+		if ($current_version ne $latest_version) {
+			print "Oh, No! You are running an old version of PGCGAP, we are going to update to the latest version $latest_version now!\n\n";
+			print "Please wait patiently, take a break and have a cup of tea or coffee\n";
+			my $installation = `conda install -y pgcgap=$latest_version`;
+			print "$installation\n";
+			exit(0);
+		}else {
+			print "Congratulations, You are running the latest version of PGCGAP v $latest_version.\n";
+			exit(0);
+		}
+	}
+}
 #=============================== Get bin PATH ======================================================
 my $pgcgap_dir;
 my $bin = `which pgcgap`;
@@ -1458,10 +1478,11 @@ if ($opt_setup_COGdb) {
 	#system("mkdir -p ~/COGdb");
 #	system("wget -c -r -nH -np -nd -R index.html -P ./ ftp://ftp.ncbi.nih.gov/pub/COG/COG2014/data/");
 #	system("gunzip prot2003-2014.fa.gz");
-	system("wget -P ./ http://bcam.hzau.edu.cn/COGdb/cognames2003-2014.tab");
-	system("wget -P ./ http://bcam.hzau.edu.cn/COGdb/fun2003-2014.tab");
-	system("wget -P ./ http://bcam.hzau.edu.cn/COGdb/cog2003-2014.csv");
-	system("wget -P ./ http://bcam.hzau.edu.cn/COGdb/prot2003-2014.fa");
+=pod
+	system("wget -c -P ./ http://bcam.hzau.edu.cn/COGdb/cognames2003-2014.tab");
+	system("wget -c -P ./ http://bcam.hzau.edu.cn/COGdb/fun2003-2014.tab");
+	system("wget -c -P ./ http://bcam.hzau.edu.cn/COGdb/cog2003-2014.csv");
+	system("wget -c -P ./ http://bcam.hzau.edu.cn/COGdb/prot2003-2014.fa");
 	system("makeblastdb -parse_seqids -in prot2003-2014.fa -input_type fasta -dbtype prot -out COG_2014");
 	system("mv COG_2014.* cog2003-2014.csv cognames2003-2014.tab fun2003-2014.tab $pgcgap_dir/");
 	system("chmod a+x $pgcgap_dir/COG*");
@@ -1469,7 +1490,17 @@ if ($opt_setup_COGdb) {
 	system("chmod a+x $pgcgap_dir/cognames2003-2014.tab");
 	system("chmod a+x $pgcgap_dir/fun2003-2014.tab");
 	system("rm prot2003-2014.fa");
-#	system("rm prot2003-2014.fa prot2003-2014.gi2gbk.tab prot2003-2014.tab Readme.201610.txt");
+=cut
+	system("wget -c -P ./ https://bcam.hzau.edu.cn/COGdb2020/cog-20.cog.csv");
+	system("wget -c -P ./ https://bcam.hzau.edu.cn/COGdb2020/cog-20.def.tab");
+	system("wget -c -P ./ https://bcam.hzau.edu.cn/COGdb2020/cog-20.fa");
+	system("wget -c -P ./ https://bcam.hzau.edu.cn/COGdb2020/fun-20.tab");
+	system("makeblastdb -parse_seqids -in cog-20.fa -input_type fasta -dbtype prot -out COG_2020");
+	system("rm cog-20.fa");
+	system("mv COG_2020.* cog-20.* fun-20.tab $pgcgap_dir/");
+	system("chmod a+x $pgcgap_dir/COG_2020.*");
+	system("chmod a+x $pgcgap_dir/cog-20.*");
+	system("chmod a+x $pgcgap_dir/fun-20.tab");
 }
 
 #===================================================================================================
@@ -1489,11 +1520,13 @@ if ($opt_STREE) {
 	my $b12 = ceil($seqnum/2) + 1;
 	print "Running muscle for sequence alignment...\n\n";
 	system("muscle -in $seqfile -out $working_dir/Results/STREE/$align_seq -log $working_dir/Results/STREE/Muscle.LOG");
-	print "Running Gblocks for selection of conserved blocks...\n\n";
+	print "Running trimAL for selection of conserved blocks...\n\n";
 	chdir "$working_dir/Results/STREE/";
-	system("Gblocks $align_seq -t=$opt_seqtype -b1=$b12 -b2=$b12 -b4=5 -b5=h -e=.gb");
+	system("trimal -in $align_seq -out $gblocks_out -automated1");
+	#system("Gblocks $align_seq -t=$opt_seqtype -b1=$b12 -b2=$b12 -b4=5 -b5=h -e=.gb");
 	print "Running IQ-TREE for phylogenetic tree construction...\n\n";
-	system("iqtree -s $gblocks_out -nt AUTO -m MFP -mtree -b $opt_bsnum");
+	#system("iqtree -s $gblocks_out -nt AUTO -m MFP -mtree -b $opt_bsnum");
+	system("iqtree -s $gblocks_out -nt $opt_threads -m MFP -mtree -b $opt_bsnum --safe");
 	chdir $working_dir;
 }
 my $threads_half = CPU();
@@ -1534,8 +1567,8 @@ if ($opt_All or $opt_Assemble) {
 			my $read1 = $name . $opt_reads1;
 			my $read2 = $name . $opt_reads2;
 			my $str = substr($read1,0,(length($read1)-$opt_suffix_len));
-			my $fastp_out1 = $name . "fastp" . $opt_reads1;#2020/4/15
-			my $fastp_out2 = $name . "fastp" . $opt_reads2;#2020/4/15
+			my $fastp_out1 = $name . ".fastp" . $opt_reads1;#2020/4/15
+			my $fastp_out2 = $name . ".fastp" . $opt_reads2;#2020/4/15
 			my $fastph = $str . ".fastp.html";#2020/4/15
 			my $fastpj = $str . ".fastp.json";#2020/4/15
 			print "Performing reads preprocessor with fastp\n\n";#2020/4/15
@@ -1710,6 +1743,7 @@ if ($opt_All or $opt_Assemble) {
 		system("mkdir -p Results/Assembles/PacBio");
 		system("mkdir -p Results/Assembles/Scaf/PacBio");
 		chdir $opt_ReadsPath;
+		my $dir_ReadsPath = getcwd;
 		my @files = glob("*$opt_reads1");
 		foreach (@files) {
 			my $name = substr($_,0,(length($_)-$opt_suffix_len));
@@ -1720,6 +1754,8 @@ if ($opt_All or $opt_Assemble) {
 			my $scaf = $name . ".contigs.fasta";
 			my $correct_reads = $name . ".correctedReads.fasta.gz";
 			my $cir_scaf = $name . ".fixstart.fasta";
+			my $sam = $name . ".sam";
+			my $polished_scaf = $name . ".polished.contigs.fasta";
 			##my $fastp_out1 = $name . ".fastp" . $opt_reads1;#2020/4/15
 			##my $fastph = $name . ".fastp.html";#2020/4/15
 			##my $fastpj = $name . ".fastp.json";#2020/4/15
@@ -1728,8 +1764,13 @@ if ($opt_All or $opt_Assemble) {
 			print "Performing --Assemble function for PacBio data...\n\n";
 			##system("canu -p $name -d $outdir genomeSize=$opt_genomeSize maxThreads=$opt_threads useGrid=false -pacbio-raw $fastp_out1");#2020/4/15
 			system("canu -p $name -d $outdir genomeSize=$opt_genomeSize maxThreads=$opt_threads useGrid=false -pacbio-raw $_");
+			print "Begin polishing with racon\n\n";
+			chdir $outdir;
+			system("bwa index $scaf");
+			system("bwa mem -x pacbio -t $opt_threads -o $sam $scaf $dir_ReadsPath/$_");
+			system("racon -t $opt_threads $dir_ReadsPath/$_ $sam $scaf > $polished_scaf");
 			##system("circlator all --assembler canu $outdir/$scaf $outdir/$correct_reads $cir_outdir");
-			system("cp $outdir/$scaf $working_dir/Results/Assembles/Scaf/PacBio/");
+			system("cp $polished_scaf $working_dir/Results/Assembles/Scaf/PacBio/");
 			##system("mv $fastp_out1 $fastph $fastpj $working_dir/Results/Assembles/FASTQ_Preprocessor");#2020/4/15
 			##system("cp $cir_outdir/06.fixstart.fasta $working_dir/Results/Assembles/Scaf/PacBio/$cir_scaf");
 #			}
@@ -1753,8 +1794,9 @@ if ($opt_All or $opt_Assemble) {
 	}elsif ($opt_platform eq "oxford") {
 		#print "Performing --Assemble function for Oxford Nanopore data...\n\n";
 		system("mkdir -p Results/Assembles/Oxford");
-		system("mkdir Results/Assembles/Scaf/Oxford");
+		system("mkdir -p Results/Assembles/Scaf/Oxford");
 		chdir $opt_ReadsPath;
+		my $dir_ReadsPath = getcwd;
 		my @files = glob("*$opt_reads1");
 		foreach (@files) {
 			my $name = substr($_,0,(length($_)-$opt_suffix_len));
@@ -1765,6 +1807,8 @@ if ($opt_All or $opt_Assemble) {
 			my $scaf = $name . ".contigs.fasta";
 			my $correct_reads = $name . ".correctedReads.fasta.gz";
 			my $cir_scaf = $name . ".fixstart.fasta";
+			my $sam = $name . ".sam";
+			my $polished_scaf = $name . ".polished.contigs.fasta";
 			##my $fastp_out1 = $name . ".fastp" . $opt_reads1;#2020/4/15
 			##my $fastph = $name . ".fastp.html";#2020/4/15
 			##my $fastpj = $name . ".fastp.json";#2020/4/15
@@ -1773,8 +1817,13 @@ if ($opt_All or $opt_Assemble) {
 			print "Performing --Assemble function for Oxford Nanopore data...\n\n";
 			##system("canu -p $name -d $outdir genomeSize=$opt_genomeSize maxThreads=$opt_threads useGrid=false -nanopore-raw $fastp_out1");#2020/4/15
 			system("canu -p $name -d $outdir genomeSize=$opt_genomeSize maxThreads=$opt_threads useGrid=false -nanopore $_");
+			print "Begin polishing with racon\n\n";
+			chdir $outdir;
+			system("bwa index $scaf");
+			system("bwa mem -x ont2d -t $opt_threads -o $sam $scaf $dir_ReadsPath/$_");
+			system("racon -t $opt_threads $dir_ReadsPath/$_ $sam $scaf > $polished_scaf");
 			##system("circlator all --assembler canu --merge_min_id 85 --merge_breaklen 1000 $outdir/$scaf $outdir/$correct_reads $cir_outdir");
-			system("cp $outdir/$scaf $working_dir/Results/Assembles/Scaf/Oxford/");
+			system("cp $polished_scaf $working_dir/Results/Assembles/Scaf/Oxford/");
 			##system("mv $fastp_out1 $fastph $fastpj $working_dir/Results/Assembles/FASTQ_Preprocessor");#2020/4/15
 			##system("cp $cir_outdir/06.fixstart.fasta $working_dir/Results/Assembles/Scaf/Oxford/$cir_scaf");
 #			}
@@ -1897,11 +1946,23 @@ if ($opt_All or $opt_CoreTree) {
 	}
 	#============================extract ortholog cluster of protein=============================
 	open SEQP, "All.pep" || die;
+	open OUT, ">All.pep2" || die;
+	while (<SEQP>) {
+		chomp;
+		if (/^(>\S+)/) {
+			print OUT $1 . "\n";
+		}else {
+			print OUT $_ . "\n";
+		}
+	}
+	close SEQP;
+	close OUT;
 
+	open IN, "All.pep2" || die;
 	local $/ = '>';
 	my %hashP = ();
 
-	while(<SEQP>){
+	while(<IN>){
 		chomp;
 		my ($name, $sequence) = split (/\n/, $_, 2);
 		next unless ($name && $sequence);
@@ -1909,7 +1970,7 @@ if ($opt_All or $opt_CoreTree) {
 		$sequence =~ s/\s+|\n|\-//g;
 		$hashP{$n} = $sequence;
 	}
-	close(SEQP);
+	close(IN);
 
 	$/ = "\n";
 	open LISTP, "core.pep.list" || die;
@@ -1936,7 +1997,7 @@ if ($opt_All or $opt_CoreTree) {
 				if(exists $hashP{$ele}){
 					print OUT ">$ele\n$hashP{$ele}\n";
 				}else{
-					warn "error! The gene id is missing in the sequence file.\n";
+					warn "error! The gene id $ele is missing in the sequence file.\n";
 				}
 			}
 		}
@@ -2105,40 +2166,33 @@ if ($opt_All or $opt_CoreTree) {
 	} # end of parse_fasta
 
 
+
+	#print "\n\n";
+	#system("mkdir -p $working_dir/Results/STREE");
+	my $seqfile = "ALL.core.protein.fasta";
+	#$seqfile =~ /(.+\/)*(.+)/;
+	#my $align_seq = $2 . ".aln";
+	my $gblocks_out = "ALL.core.protein.fasta.gb";
+	my $seqnum = `grep -c '^>' $seqfile`;
+	print "There are $seqnum sequences in the input file\n\n";
+	my $b12 = ceil($seqnum/2) + 1;
+	#print "Running muscle for sequence alignment...\n\n";
+	#system("muscle -in $seqfile -out $working_dir/Results/STREE/$align_seq -log $working_dir/Results/STREE/Muscle.LOG");
+
+	print "Running trimAL for selection of conserved blocks...\n\n";
+	system("trimal -in $seqfile -out $gblocks_out -automated1");
+
+	#print "Running Gblocks for selection of conserved blocks...\n\n";
+	#system("Gblocks $seqfile -t=p -b1=$b12 -b2=$b12 -b4=5 -b5=h -e=.gb");
+
 	print "Constructing ML tree of the single copy core proteins...\n\n";
 	#===============================================================================
-	system("modeltest-ng -i ALL.core.protein.fasta -t ml -o modeltest_aa -p $opt_threads -d aa");
-	open LOGa, "modeltest_aa.log" || die;
-	my $bica;
-	my $aica;
-	my $aicca;
-	while (<LOGa>) {
-		chomp;
-		if (/\s+BIC\s+(\S+)\s+\S+\s+\S+/) {
-			$bica = $1;
-		}elsif (/\s+AIC\s+(\S+)\s+\S+\s+\S+/) {
-			$aica = $1;
-		}elsif (/\s+AICc\s+(\S+)\s+\S+\s+\S+/) {
-			$aicca = $1;
-		}
-	}
-	close LOGa;
-
-	if ($bica eq $aica and $bica eq $aicca) {
-		system("raxml-ng --all --msa ALL.core.protein.fasta --prefix ALL.core.protein.BIC.AIC.AICc.$bica --model $bica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-	}elsif ($bica ne $aica and $aica eq $aicca) {
-		system("raxml-ng --all --msa ALL.core.protein.fasta --prefix ALL.core.protein.BIC.$bica --model $bica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		system("raxml-ng --all --msa ALL.core.protein.fasta --prefix ALL.core.protein.AIC.AICc.$aica --model $aica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-	}elsif ($bica ne $aica and $aica ne $aicca and $bica ne $aicca) {
-		system("raxml-ng --all --msa ALL.core.protein.fasta --prefix ALL.core.protein.BIC.$bica --model $bica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		system("raxml-ng --all --msa ALL.core.protein.fasta --prefix ALL.core.protein.AIC.$aica --model $aica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		system("raxml-ng --all --msa ALL.core.protein.fasta --prefix ALL.core.protein.AICc.$aicca --model $aicca --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-	}elsif ($bica eq $aica and $aica ne $aicca) {
-		system("raxml-ng --all --msa ALL.core.protein.fasta --prefix ALL.core.protein.BIC.AIC.$bica --model $bica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		system("raxml-ng --all --msa ALL.core.protein.fasta --prefix ALL.core.protein.AICc.$aicca --model $aicca --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-	}elsif ($bica eq $aicca and $aica ne $aicca) {
-		system("raxml-ng --all --msa ALL.core.protein.fasta --prefix ALL.core.protein.BIC.AICc.$bica --model $bica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		system("raxml-ng --all --msa ALL.core.protein.fasta --prefix ALL.core.protein.AIC.$bica --model $aica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
+	if ($opt_fasttree) {
+		print "Running FastTree for phylogenetic tree construction...\n\n";
+		system("fasttree -quiet $gblocks_out > ALL.core.protein.nwk");
+	}else {
+		print "Running IQ-TREE for phylogenetic tree construction...\n\n";
+		system("iqtree -s $gblocks_out -nt $opt_threads -m MFP -mtree -b $opt_bsnum --safe");
 	}
 	#===================================================================================
 	#system("fasttree ALL.core.protein.fasta > ALL.core.protein.nwk");
@@ -2393,40 +2447,25 @@ if ($opt_All or $opt_CoreTree) {
 
 		print "Calling core SNPs...\n";
 		system("snp-sites -o ALL.core.snp.fasta ALL.core.nucl.fasta");
-		#===================modeltest-ng and raxml-ng====================================
-		system("modeltest-ng -i ALL.core.snp.fasta -t ml -o modeltest_nt -p $opt_threads -d nt");
-		print "Constructing ML tree of core SNPS...\n\n";
-		open LOG, "modeltest_nt.log" || die;
-		my $bic;
-		my $aic;
-		my $aicc;
-		while (<LOG>) {
-			chomp;
-			if (/\s+BIC\s+(\S+)\s+\S+\s+\S+/) {
-				$bic = $1;
-			}elsif (/\s+AIC\s+(\S+)\s+\S+\s+\S+/) {
-				$aic = $1;
-			}elsif (/\s+AICc\s+(\S+)\s+\S+\s+\S+/) {
-				$aicc = $1;
-			}
-		}
-		close LOG;
 
-		if ($bic eq $aic and $bic eq $aicc) {
-			system("raxml-ng --all --msa ALL.core.snp.fasta --prefix ALL.core.snp.BIC.AIC.AICc.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		}elsif ($bic ne $aic and $aic eq $aicc) {
-			system("raxml-ng --all --msa ALL.core.snp.fasta --prefix ALL.core.snp.BIC.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa ALL.core.snp.fasta --prefix ALL.core.snp.AIC.AICc.$aic --model $aic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		}elsif ($bic ne $aic and $aic ne $aicc and $bic ne $aicc) {
-			system("raxml-ng --all --msa ALL.core.snp.fasta --prefix ALL.core.snp.BIC.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa ALL.core.snp.fasta --prefix ALL.core.snp.AIC.$aic --model $aic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa ALL.core.snp.fasta --prefix ALL.core.snp.AICc.$aicc --model $aicc --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		}elsif ($bic eq $aic and $aic ne $aicc) {
-			system("raxml-ng --all --msa ALL.core.snp.fasta --prefix ALL.core.snp.BIC.AIC.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa ALL.core.snp.fasta --prefix ALL.core.snp.AICc.$aicc --model $aicc --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		}elsif ($bic eq $aicc and $aic ne $aicc) {
-			system("raxml-ng --all --msa ALL.core.snp.fasta --prefix ALL.core.snp.BIC.AICc.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa ALL.core.snp.fasta --prefix ALL.core.snp.AIC.$bic --model $aic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
+		my $seqfilen = "ALL.core.snp.fasta";
+		my $gblocks_outn = "ALL.core.snp.fasta.gb";
+		my $seqnumn = `grep -c '^>' $seqfilen`;
+		print "There are $seqnumn sequences in the input file\n\n";
+		my $b12n = ceil($seqnumn/2) + 1;
+
+		print "Running trimAL for selection of conserved blocks...\n\n";
+		system("trimal -in $seqfilen -out $gblocks_outn -automated1");
+
+		#print "Running Gblocks for selection of conserved blocks...\n\n";
+		#system("Gblocks $seqfilen -t=d -b1=$b12n -b2=$b12n -b4=5 -b5=h -e=.gb");
+
+		if ($opt_fasttree) {
+			print "Running FastTree for phylogenetic tree construction...\n\n";
+			system("fasttree -nt -gtr -quiet $gblocks_outn > ALL.core.snp.nwk");
+		}else {
+			print "Running IQ-TREE for phylogenetic tree construction...\n\n";
+			system("iqtree -s $gblocks_outn -nt $opt_threads -m MFP -mtree -b $opt_bsnum --safe");
 		}
 		system("mv ALL.core.snp.* ../Results/CoreTrees/");
 		#===================end==========================================================
@@ -2437,10 +2476,13 @@ if ($opt_All or $opt_CoreTree) {
 		#system("mv ALL.core.snp.fasta ALL.core.snp.nwk ../Results/CoreTrees/");
 		
 		chdir "../";
-		system("mv faa2ffn ./Results/CoreTrees/");
-		system("mv ffn ./Results/CoreTrees/");
+		rmove("faa2ffn", "./Results/CoreTrees/faa2ffn");
+		rmove("ffn", "./Results/CoreTrees/ffn");
+		#system("mv faa2ffn ./Results/CoreTrees/");
+		#system("mv ffn ./Results/CoreTrees/");
 	}
-	system("mv faa ./Results/CoreTrees/");
+	rmove("faa", "./Results/CoreTrees/faa");
+	#system("mv faa ./Results/CoreTrees/");
 	system("mv All.* ./Results/CoreTrees/");
 	system("mv core.pep.list ./Results/CoreTrees/");
 	my $time_coretreed = time();
@@ -2455,22 +2497,47 @@ if ($opt_All or $opt_Pan) {
 	#Roary takes GFF3 files as input. They must contain the nucleotide sequence at the end of the file. All GFF3 files created by Prokka are valid with Roary
 	my $pangenome = "Results/PanGenome";
 	#system("roary -p $opt_threads -e --mafft -r -t $opt_codon -f $pangenome $opt_GffPath/*.gff");
-	system("roary -p $opt_threads -r -t $opt_codon -f $pangenome $opt_GffPath/*.gff");
-	chdir "Results/PanGenome";
+	system("roary -p $opt_threads -r -t $opt_codon -i $opt_identi -f $pangenome $opt_GffPath/*.gff");
+	#my $dir = "Results/PanGenome_*";
+	#chdir $dir || print "Can not cd into $dir";
+	chdir $pangenome;
 	system("create_pan_genome_plots.R");#create pan genome plots
 	system("Rscript $pgcgap_dir/plot_3Dpie.R");#plot pangenome 3D-pie
 	system("python $pgcgap_dir/fmplot.py --labels accessory_binary_genes.fa.newick gene_presence_absence.csv");
-
+	chdir $working_dir;
 	if ($opt_PanTree) {
 		#Constructing Roary single-copy core proteins tree
-		system("mkdir Core");
-		chdir $working_dir;
+		system("mkdir $working_dir/$pangenome/Core");
+		chdir $opt_GffPath;
+		my @gff = glob("*.gff");
+		foreach my $gff (@gff) {
+			$gff=~/(.+).gff/;
+			my $name = $1;
+			print $name . "\n";
+			system("perl $pgcgap_dir/grep_cds_aas_from_gff3.pl $gff $name");
+		}
+		system("mv *.id *.cds *.pep $working_dir/$pangenome/Core");
+		chdir "$working_dir/$pangenome/Core";
+		#chdir $working_dir;
 		
 		my %hash;
-		system("cat $opt_AAsPath/*.faa > Results/PanGenome/Core/All_aa.fa");
-		chdir "Results/PanGenome/Core";
+		system("cat *.pep > All_aa.fa");
+		#chdir "Results/PanGenome/Core";
+		open SEQP, "All_aa.fa" || die;
+		open OUT, ">All_aa.fa2" || die;
+		while (<SEQP>) {
+			chomp;
+			if (/^(>\S+)/) {
+				print OUT $1 . "\n";
+			}else {
+				print OUT $_ . "\n";
+			}
+		}
+		close SEQP;
+		close OUT;
+
 		local $/ = ">";
-		open AA, "All_aa.fa" || die;
+		open AA, "All_aa.fa2" || die;
 		<AA>;
 		while (<AA>) {
 			chomp;
@@ -2698,40 +2765,25 @@ if ($opt_All or $opt_Pan) {
 			return(%seq_hashr);
 		} # end of parse_fastar
 
+		my $seqfilen = "Roary.core.protein.fasta";
+		my $gblocks_outn = "Roary.core.protein.fasta.gb";
+		my $seqnumn = `grep -c '^>' $seqfilen`;
+		print "There are $seqnumn sequences in the input file\n\n";
+		my $b12n = ceil($seqnumn/2) + 1;
+
+		print "Running trimAL for selection of conserved blocks...\n\n";
+		system("trimal -in $seqfilen -out $gblocks_outn -automated1");
+
+		#print "Running Gblocks for selection of conserved blocks...\n\n";
+		#system("Gblocks $seqfilen -t=p -b1=$b12n -b2=$b12n -b4=5 -b5=h -e=.gb");
 		print "Constructing ML tree of the single-copy core proteins...\n\n";
 		#===============================================================================
-		system("modeltest-ng -i Roary.core.protein.fasta -t ml -o Roary.modeltest_aa -p $opt_threads -d aa");
-		open LOGa, "Roary.modeltest_aa.log" || die;
-		my $bica;
-		my $aica;
-		my $aicca;
-		while (<LOGa>) {
-			chomp;
-			if (/\s+BIC\s+(\S+)\s+\S+\s+\S+/) {
-				$bica = $1;
-			}elsif (/\s+AIC\s+(\S+)\s+\S+\s+\S+/) {
-				$aica = $1;
-			}elsif (/\s+AICc\s+(\S+)\s+\S+\s+\S+/) {
-				$aicca = $1;
-			}
-		}
-		close LOGa;
-
-		if ($bica eq $aica and $bica eq $aicca) {
-			system("raxml-ng --all --msa Roary.core.protein.fasta --prefix Roary.core.protein.BIC.AIC.AICc.$bica --model $bica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		}elsif ($bica ne $aica and $aica eq $aicca) {
-			system("raxml-ng --all --msa Roary.core.protein.fasta --prefix Roary.core.protein.BIC.$bica --model $bica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa Roary.core.protein.fasta --prefix Roary.core.protein.AIC.AICc.$aica --model $aica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		}elsif ($bica ne $aica and $aica ne $aicca and $bica ne $aicca) {
-			system("raxml-ng --all --msa Roary.core.protein.fasta --prefix Roary.core.protein.BIC.$bica --model $bica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa Roary.core.protein.fasta --prefix Roary.core.protein.AIC.$aica --model $aica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa Roary.core.protein.fasta --prefix Roary.core.protein.AICc.$aicca --model $aicca --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		}elsif ($bica eq $aica and $aica ne $aicca) {
-			system("raxml-ng --all --msa Roary.core.protein.fasta --prefix Roary.core.protein.BIC.AIC.$bica --model $bica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa Roary.core.protein.fasta --prefix Roary.core.protein.AICc.$aicca --model $aicca --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		}elsif ($bica eq $aicca and $aica ne $aicca) {
-			system("raxml-ng --all --msa Roary.core.protein.fasta --prefix Roary.core.protein.BIC.AICc.$bica --model $bica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa Roary.core.protein.fasta --prefix Roary.core.protein.AIC.$bica --model $aica --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
+		if ($opt_fasttree) {
+			print "Running FastTree for phylogenetic tree construction...\n\n";
+			system("fasttree -quiet $gblocks_outn > Roary.core.protein.nwk");
+		}else {
+			print "Running IQ-TREE for phylogenetic tree construction...\n\n";
+			system("iqtree -s $gblocks_outn -nt $opt_threads -m MFP -mtree -b $opt_bsnum --safe");
 		}
 		#===================================================================================
 		#system("fasttree Roary.core.protein.fasta > Roary.core.protein.nwk");
@@ -2749,18 +2801,217 @@ if ($opt_All or $opt_OrthoF) {
 	#system("mkdir Results/OrthoF");
 	my $orthoFprefix = "orthoF";
 	system("orthofinder -a $opt_threads -t $opt_threads -S $opt_Sprogram -n $orthoFprefix -f $opt_AAsPath");
+	if (-e (glob("$working_dir/$opt_AAsPath/OrthoFinder/Results_orthoF/Single_Copy_Orthologue_Sequences/*.fa"))[0]) {
+		system("mkdir -p $working_dir/$opt_AAsPath/OrthoFinder/Results_orthoF/Single_Copy_Orthologue_Tree");
+		chdir "$working_dir/$opt_AAsPath/OrthoFinder/Results_orthoF/Single_Copy_Orthologue_Sequences";
+		print "Running mafft...\n\n";
+	#	system("unset MAFFT_BINARIES");
+		my @fa = glob("*.fa");
+		foreach (@fa){
+			my $name=substr($_,0,(length($_)-3));
+			my $in=$name.".fa";
+			my $out=$name.".aln";
+			system("mafft --quiet --auto --thread $opt_threads $in > $out");
+		}
+
+
+		##==============CONSTRUCT Single Copy Orthologue TREE========================================================
+		#print "Starting to construct Single Copy Orthologue tree...\n\n";
+		open CON, ">Single.Copy.Orthologue.fasta" || die "Open Single.Copy.Orthologue.fasta failed\n";
+		my $nfilesp = 0; # count number of files
+		my %nseqp_hashp = (); # key:infile, val:nseqp
+		my %seqid_count_hashp = (); # key:seqid, val:count
+		my %HoHp              = ();   #
+		my %seqid_HoHp        = ();   #
+		my $first_namep       = q{};  # First name in matrix.
+		my $lwidthp           = 60;   # default line width for fasta
+		my $spacep            = "\t"; # spacepr for aligned print
+		my $ncharp            = 0;    # ncharp for phyml header.
+		my $nseqp;                    # nseqp for phyml header. Do not initiate!
+		my $termp             = $/;   # input record separator
+		my @hash_refp_arrayp   = ();   # array with hash references
+
+
+		my @fasp = glob("*.aln");
+		foreach my $argp (@fasp) {
+			my $infilep  = $argp;
+			my %seq_hashp = parse_fastao($infilep); # key: seqid, value:sequence
+			$nfilesp++;
+
+			## Save sequences in array with hash references. Does this work for really large number of fasta files?
+			my $hash_refp     = \%seq_hashp;
+			push(@hash_refp_arrayp, $hash_refp);
+
+			## Add nseqps to global nseqp_hashp:
+			$nseqp_hashp{$infilep} = scalar(keys(%seq_hashp));
+
+			## Get length of sequence for all tax labels. Put in hashes.
+			foreach my $tax_keyp (keys %seq_hashp) {
+				$seqid_count_hashp{$tax_keyp}++;
+				$HoHp{$infilep}{$tax_keyp} = length($seq_hashp{$tax_keyp});
+				$seqid_HoHp{$infilep}{$tax_keyp}++;
+			}
+
+			## Check all seqs are same length
+			my $length;
+			my $lnamep;
+			foreach my $name (keys %seq_hashp) {
+				my $l = length $seq_hashp{$name};
+				if (defined $length) {
+					if ($length != $l) {
+						print STDERR "Error!\nseqpuences in $infilep not all same length ($lnamep is $length, $name is $l)\n";
+						exit(1);
+					}
+				}else {
+					$length = length $seq_hashp{$name};
+					$lnamep  = $name;
+				}
+			}
+		} # Done with file
+
+
+		#---------------------------------------------------------------------------
+		#  Check if the same number of sequences
+		#---------------------------------------------------------------------------
+		my $lnamep;
+		foreach my $file (keys %nseqp_hashp) {
+			my $l = $nseqp_hashp{$file}; # val is a length
+			if (defined $nseqp) {
+				if ($nseqp != $l) {
+					print STDERR "Error!\nNumber of sequences in files differ ($lnamep has $nseqp, $file has $l)\n";
+					exit(1);
+				}
+			}else {
+				$nseqp = $nseqp_hashp{$file};
+				$lnamep  = $file;
+			}
+		}
+
+
+		#---------------------------------------------------------------------------
+		#  Check sequence id's
+		#---------------------------------------------------------------------------
+		if (scalar((keys %seqid_count_hashp)) != $nseqp) { # number of unique seqid's not eq to nseqps
+			foreach my $key (sort { $seqid_count_hashp{$b} <=> $seqid_count_hashp{$a} } (keys %seqid_count_hashp)) {
+				print STDERR "$key --> $seqid_count_hashp{$key}\n";
+			}
+			print STDERR "\nError!\nSome sequence labels does not occur in all files.\n";
+			print STDERR "That is, sequence id's needs to be identical for concatenation.\n\n";
+			exit(1);
+		}else {
+			## Find the longest taxon name for aligned printing
+			my @sorted_names = sort { length($b) <=> length($a) } keys %seqid_count_hashp;
+			$spacep = length( shift(@sorted_names) ) + 2;
+			$first_namep = $sorted_names[0];
+		}
+
+
+		#---------------------------------------------------------------------------
+		#Get ncharp
+		#---------------------------------------------------------------------------
+		foreach my $h_ref (@hash_refp_arrayp) {
+			$ncharp = $ncharp + length($h_ref->{$first_namep});
+		}
+
+
+		#---------------------------------------------------------------------------
+		#Print everything to STDOUT
+		#---------------------------------------------------------------------------
+		print STDERR "\nChecked $nfilesp files -- sequence labels and lengths seems OK.\n";
+		print STDERR "Concatenated $nseqp sequences, length $ncharp.\n";
+		print STDERR "Printing concatenation to 'Single.Copy.Orthologue.fasta'.\n\n";
+
+		##Print the array with hash references (does this work with really large number of files (hashes))?
+		##First, concatenate all sequences from hashes
+		my %print_hashp = (); # key:label, value:sequence
+		foreach my $h_ref (@hash_refp_arrayp) {
+			foreach my $seqid (sort keys %$h_ref) {
+				$print_hashp{$seqid} .= $h_ref->{$seqid};
+			}
+		}
+		##Then print, and add line breaks in sequences
+		foreach my $label (sort keys  %print_hashp) {
+			print CON ">$label\n";
+
+			##Print sequence
+			##TODO: phylip strict printing of sequence in blocks of 10
+			$print_hashp{$label} =~ s/\S{$lwidthp}/$&\n/gs; ## replace word of size $lwidthp with itself and "\n"
+			print CON $print_hashp{$label}, "\n";
+		}
+
+		print STDERR "Concatenate FASTA alignments to FASTA format completed.\n\n";
+
+
+		sub parse_fastao {
+			my ($infilep) = @_;
+			my $termp     = $/; # input record separator;
+			my %seq_hashp = (); # key:seqid, val:seq
+			open my $INFILEP, "<", $infilep or die "could not open infile '$infilep' : $! \n";
+			$/ = ">";
+			while(<$INFILEP>) {
+				chomp;
+				next if($_ eq '');
+				my ($id, @sequencelines) = split /\n/;
+				if ($id=~/(^\S+)_\S+$/) {
+					$id = $1;
+					foreach my $line (@sequencelines) {
+						$seq_hashp{$id} .= $line;
+					}
+				}
+			}
+			$/ = $termp;
+			return(%seq_hashp);
+		} # end of parse_fasta
+
+
+
+		#print "\n\n";
+		#system("mkdir -p $working_dir/Results/STREE");
+		my $seqfile = "Single.Copy.Orthologue.fasta";
+		#$seqfile =~ /(.+\/)*(.+)/;
+		#my $align_seq = $2 . ".aln";
+		my $gblocks_out = "Single.Copy.Orthologue.fasta.gb";
+		my $seqnum = `grep -c '^>' $seqfile`;
+		print "There are $seqnum sequences in the input file\n\n";
+		my $b12 = ceil($seqnum/2) + 1;
+		#print "Running muscle for sequence alignment...\n\n";
+		#system("muscle -in $seqfile -out $working_dir/Results/STREE/$align_seq -log $working_dir/Results/STREE/Muscle.LOG");
+
+		print "Running trimAL for selection of conserved blocks...\n\n";
+		system("trimal -in $seqfile -out $gblocks_out -automated1");
+
+		#print "Running Gblocks for selection of conserved blocks...\n\n";
+		#system("Gblocks $seqfile -t=p -b1=$b12 -b2=$b12 -b4=5 -b5=h -e=.gb");
+
+		print "Constructing ML tree of the Single Copy Orthologue proteins...\n\n";
+		#===============================================================================
+		if ($opt_fasttree) {
+			print "Running FastTree for phylogenetic tree construction...\n\n";
+			system("fasttree -quiet $gblocks_out > Single.Copy.Orthologue.nwk");
+		}else {
+			print "Running IQ-TREE for phylogenetic tree construction...\n\n";
+			system("iqtree -s $gblocks_out -nt $opt_threads -m MFP -mtree -b $opt_bsnum --safe");
+		}
+		#===================================================================================
+		#system("fasttree Single.Copy.Orthologue.fasta > Single.Copy.Orthologue.nwk");
+		print "Constructing single copy Orthologue protein tree completed\n\n";
+		system("mv Single.Copy.Orthologue.* ../Single_Copy_Orthologue_Tree/");
+		#===============================================================================
+	}
+	chdir $working_dir;
+	rmove("$opt_AAsPath/OrthoFinder/", "Results/OrthoFinder");
 	my $time_OrthoFd = time();
 	my $time_OrthoF = ($time_OrthoFd - $time_OrthoFs)/3600;
 	print "The 'OrthoF' program runs for $time_OrthoF hours.\n\n";
 	#system("mv $opt_AAsPath/Results_orthoF* Results/OrthoF");
 #	system("mv $opt_AAsPath/OrthoFinder/ Results/");
-	system("mv $opt_AAsPath/*rtho*/ Results/");
+#	system("mv $opt_AAsPath/*rtho*/ Results/");
 }
 
 if ($opt_All or $opt_MASH) {
 	my $time_MASHs = time();
 	print "Performing --MASH function...\n\n";
-	system("mkdir Results/MASH");
+	system("mkdir -p Results/MASH");
 	chdir $opt_scafPath;
 	my @genome = glob("*$opt_Scaf_suffix");
 	foreach  (@genome) {
@@ -2794,8 +3045,9 @@ if ($opt_All or $opt_MASH) {
 if ($opt_All or $opt_ANI) {
 	my $time_ANIs = time();
 	print "Performing --ANI function...\n\n";
-	system("mkdir Results/ANI");
-	system("fastANI --matrix -t $opt_threads --ql $opt_queryL --rl $opt_refL -o $opt_ANIO");
+	system("mkdir -p Results/ANI");
+	my $ANIO = "Results/ANI/ANIs";
+	system("fastANI --matrix -t $opt_threads --ql $opt_queryL --rl $opt_refL -o $ANIO");
 	chdir "Results/ANI";
 	system("perl $pgcgap_dir/triangle2list.pl");
 	system("perl $pgcgap_dir/get_ANImatrix.pl --Scaf_suffix $opt_Scaf_suffix");
@@ -2809,7 +3061,7 @@ if ($opt_All or $opt_ANI) {
 if ($opt_VAR) {
 	my $time_VARs = time();
 	print "Performing --VAR function...\n\n";
-	system("mkdir Results/Variants");
+	system("mkdir -p Results/Variants");
 	chdir "$opt_ReadsPath";
 	system("mkdir Trimmed");
 	system("cp $opt_refgbk ./");
@@ -2831,11 +3083,11 @@ if ($opt_VAR) {
 		my $trir = $str . "_trimmed_2.fastq";
 		my $tris = $str . "_trimmed_s.fastq";
 		system("sickle pe -f $read1 -r $read2 -t $opt_qualtype -o Trimmed/$trif -p Trimmed/$trir -s Trimmed/$tris -q $opt_qual -l $opt_length");#Quality trimming
-		system("snippy --cpus $opt_threads --ram $opt_ram --prefix $str --mincov $opt_mincov --minfrac $opt_minfrac --minqual $opt_minqual --outdir ../../Results/Variants/$str --ref $opt_refgbk --R1 Trimmed/$trif --R2 Trimmed/$trir --report");
+		system("snippy --cpus $opt_threads --ram $opt_ram --prefix $str --mincov $opt_mincov --minfrac $opt_minfrac --minqual $opt_minqual --outdir $working_dir/Results/Variants/$str --ref $opt_refgbk --R1 Trimmed/$trif --R2 Trimmed/$trir --report");
 	}
 	chdir $working_dir;
 	system("snippy-core --ref $opt_refgbk $working_dir/Results/Variants/*");
-	system("mkdir Results/Variants/Core");
+	system("mkdir -p Results/Variants/Core");
 
 	if ($opt_strain_num > 2) {
 		my @corefull = ("run_gubbins.py --tree_builder $opt_tree_builder --iterations $opt_iterations --prefix gubbins.core.full core.full.aln");
@@ -2843,42 +3095,9 @@ if ($opt_VAR) {
 		my $corefull = system(@corefull);
 		if (!($corefull == 0)) {
 			#print "Some error happens when running gubbins! The recombinations will not be predicted, and running fasttree to construct the trees instead!\n";
-			print "Some error happens when running gubbins! The recombinations will not be predicted, and running raxml-ng to construct the trees instead!\n";
+			print "Some error happens when running gubbins! The recombinations will not be predicted, and running IQ-TREE to construct the trees instead!\n";
 			#===================modeltest-ng and raxml-ng====================================
-			system("modeltest-ng -i core.full.aln -t ml -o core.full.modeltest_nt -p $opt_threads -d nt");
-			print "Constructing ML tree of core.full.aln...\n\n";
-			open LOG, "core.full.modeltest_nt.log" || die;
-			my $bic;
-			my $aic;
-			my $aicc;
-			while (<LOG>) {
-				chomp;
-				if (/\s+BIC\s+(\S+)\s+\S+\s+\S+/) {
-					$bic = $1;
-				}elsif (/\s+AIC\s+(\S+)\s+\S+\s+\S+/) {
-					$aic = $1;
-				}elsif (/\s+AICc\s+(\S+)\s+\S+\s+\S+/) {
-					$aicc = $1;
-				}
-			}
-			close LOG;
-
-			if ($bic eq $aic and $bic eq $aicc) {
-				system("raxml-ng --all --msa core.full.aln --prefix core.full.BIC.AIC.AICc.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			}elsif ($bic ne $aic and $aic eq $aicc) {
-				system("raxml-ng --all --msa core.full.aln --prefix core.full.BIC.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-				system("raxml-ng --all --msa core.full.aln --prefix core.full.AIC.AICc.$aic --model $aic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			}elsif ($bic ne $aic and $aic ne $aicc and $bic ne $aicc) {
-				system("raxml-ng --all --msa core.full.aln --prefix core.full.BIC.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-				system("raxml-ng --all --msa core.full.aln --prefix core.full.AIC.$aic --model $aic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-				system("raxml-ng --all --msa core.full.aln --prefix core.full.AICc.$aicc --model $aicc --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			}elsif ($bic eq $aic and $aic ne $aicc) {
-				system("raxml-ng --all --msa core.full.aln --prefix core.full.BIC.AIC.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-				system("raxml-ng --all --msa core.full.aln --prefix core.full.AICc.$aicc --model $aicc --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			}elsif ($bic eq $aicc and $aic ne $aicc) {
-				system("raxml-ng --all --msa core.full.aln --prefix core.full.BIC.AICc.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-				system("raxml-ng --all --msa core.full.aln --prefix core.full.AIC.$bic --model $aic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			}
+			system("iqtree -s core.full.aln -nt $opt_threads -m MFP -mtree -b $opt_bsnum --safe");
 			system("mv core.ref.fa core.tab core.txt core.vcf gubbins.* core.full.* Results/Variants/Core/");
 			#===================end==========================================================
 			#system("fasttree -nt -gtr core.full.aln > core.full.nwk");
@@ -2889,81 +3108,16 @@ if ($opt_VAR) {
 		}
 	} else {
 		#===================modeltest-ng and raxml-ng====================================
-		system("modeltest-ng -i core.full.aln -t ml -o core.full.modeltest_nt -p $opt_threads -d nt");
-		print "Constructing ML tree of core.full.aln...\n\n";
-		open LOG, "core.full.modeltest_nt.log" || die;
-		my $bic;
-		my $aic;
-		my $aicc;
-		while (<LOG>) {
-			chomp;
-			if (/\s+BIC\s+(\S+)\s+\S+\s+\S+/) {
-				$bic = $1;
-			}elsif (/\s+AIC\s+(\S+)\s+\S+\s+\S+/) {
-				$aic = $1;
-			}elsif (/\s+AICc\s+(\S+)\s+\S+\s+\S+/) {
-				$aicc = $1;
-			}
-		}
-		close LOG;
-
-		if ($bic eq $aic and $bic eq $aicc) {
-			system("raxml-ng --all --msa core.full.aln --prefix core.full.BIC.AIC.AICc.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		}elsif ($bic ne $aic and $aic eq $aicc) {
-			system("raxml-ng --all --msa core.full.aln --prefix core.full.BIC.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa core.full.aln --prefix core.full.AIC.AICc.$aic --model $aic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		}elsif ($bic ne $aic and $aic ne $aicc and $bic ne $aicc) {
-			system("raxml-ng --all --msa core.full.aln --prefix core.full.BIC.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa core.full.aln --prefix core.full.AIC.$aic --model $aic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa core.full.aln --prefix core.full.AICc.$aicc --model $aicc --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		}elsif ($bic eq $aic and $aic ne $aicc) {
-			system("raxml-ng --all --msa core.full.aln --prefix core.full.BIC.AIC.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa core.full.aln --prefix core.full.AICc.$aicc --model $aicc --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		}elsif ($bic eq $aicc and $aic ne $aicc) {
-			system("raxml-ng --all --msa core.full.aln --prefix core.full.BIC.AICc.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-			system("raxml-ng --all --msa core.full.aln --prefix core.full.AIC.$bic --model $aic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		}
+		system("iqtree -s core.full.aln -nt $opt_threads -m MFP -mtree -b $opt_bsnum --safe");
 		system("mv core.ref.fa core.tab core.txt core.vcf core.full.* Results/Variants/Core/");
 		#===================end==========================================================
 		#system("fasttree -nt -gtr core.full.aln > core.full.nwk");
 		#system("mv core.full.aln core.ref.fa core.tab core.txt core.vcf core.full.nwk Results/Variants/Core/");
 	}
 	#===================modeltest-ng and raxml-ng====================================
-	system("modeltest-ng -i core.aln -t ml -o core.modeltest_nt -p $opt_threads -d nt");
-	print "Constructing ML tree of core.aln...\n\n";
-	open LOG, "core.modeltest_nt.log" || die;
-	my $bic;
-	my $aic;
-	my $aicc;
-	while (<LOG>) {
-		chomp;
-		if (/\s+BIC\s+(\S+)\s+\S+\s+\S+/) {
-			$bic = $1;
-		}elsif (/\s+AIC\s+(\S+)\s+\S+\s+\S+/) {
-			$aic = $1;
-		}elsif (/\s+AICc\s+(\S+)\s+\S+\s+\S+/) {
-			$aicc = $1;
-		}
-	}
-	close LOG;
-
-	if ($bic eq $aic and $bic eq $aicc) {
-		system("raxml-ng --all --msa core.aln --prefix core.BIC.AIC.AICc.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-	}elsif ($bic ne $aic and $aic eq $aicc) {
-		system("raxml-ng --all --msa core.aln --prefix core.BIC.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		system("raxml-ng --all --msa core.aln --prefix core.AIC.AICc.$aic --model $aic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-	}elsif ($bic ne $aic and $aic ne $aicc and $bic ne $aicc) {
-		system("raxml-ng --all --msa core.aln --prefix core.BIC.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		system("raxml-ng --all --msa core.aln --prefix core.AIC.$aic --model $aic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		system("raxml-ng --all --msa core.aln --prefix core.AICc.$aicc --model $aicc --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-	}elsif ($bic eq $aic and $aic ne $aicc) {
-		system("raxml-ng --all --msa core.aln --prefix core.BIC.AIC.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		system("raxml-ng --all --msa core.aln --prefix core.AICc.$aicc --model $aicc --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-	}elsif ($bic eq $aicc and $aic ne $aicc) {
-		system("raxml-ng --all --msa core.aln --prefix core.BIC.AICc.$bic --model $bic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-		system("raxml-ng --all --msa core.aln --prefix core.AIC.$bic --model $aic --tree pars{10} --bs-trees autoMRE{1000} --threads $opt_threads --force");
-	}
+	system("iqtree -s core.aln -nt $opt_threads -m MFP -mtree -b $opt_bsnum --safe");
 	system("mv core.* Results/Variants/Core/");
+	chdir $working_dir;
 	#===================end==========================================================
 	#system("fasttree -nt -gtr core.aln > core.nwk");
 	#system("mv core.aln core.nwk Results/Variants/Core/");
@@ -2975,7 +3129,7 @@ if ($opt_VAR) {
 if ($opt_All or $opt_AntiRes) {
 	my $time_Antis = time();
 	print "Performing --AntiRes function...\n\n";
-	system("mkdir Results/AntiRes");
+	system("mkdir -p Results/AntiRes");
 	chdir $opt_scafPath;
 	my @genome = glob("*$opt_Scaf_suffix");
 	foreach  (@genome) {
@@ -2993,8 +3147,8 @@ if ($opt_All or $opt_AntiRes) {
 if ($opt_All or $opt_pCOG) {
 	my $time_COGs = time();
 	print "Performing --COG function...\n\n";
-	system("mkdir Results/COG");
-	system("COG.pl --threads $opt_threads --strain_num $opt_strain_num --AAsPath $opt_AAsPath");
+	system("mkdir -p Results/COG");
+	system("COG2020.pl --threads $opt_threads --strain_num $opt_strain_num --AAsPath $opt_AAsPath");
 	system("mv $opt_AAsPath/*.table $opt_AAsPath/*.pdf $opt_AAsPath/*.xml $working_dir/Results/COG");
 	chdir $working_dir;
 	my $time_COGd = time();
@@ -3010,6 +3164,7 @@ if ($opt_ACC) {
 	if ($opt_Assess) {
 		chdir $opt_scafPath;
 		system("genome_LenFilter_stats.pl --Scaf_suffix $opt_Scaf_suffix --filter_length $opt_filter_length");
+		system("get_stats_summary.pl --Scaf_suffix $opt_Scaf_suffix");
 		chdir $working_dir;
 	}
 }
@@ -3187,7 +3342,7 @@ sub printAssemble{
 
 sub printAnnotate{
 	print "[--scafPath (PATH)] Path for contigs/scaffolds ( Default 'Results/Assembles/Scaf/Illumina' )\n";
-	print "[--Scaf_suffix (STRING)] The suffix of scaffolds or genomes. Here, '-8.fa' for Illumina data, '.contigs.fasta' for PacBio data and Oxford data. Users can also fill in other suffixes according to the actual situation ( Default -8.fa )\n";
+	print "[--Scaf_suffix (STRING)] The suffix of scaffolds or genome files. Users should set the suffixes according to the actual situation ( Default -8.fa )\n";
 	print "[--codon (INT)] Translation table ( Default 11 )\n  1   Universal code\n  2   Vertebrate mitochondrial code\n  3   Yeast mitochondrial code\n  4   Mold, Protozoan, and Coelenterate Mitochondrial code and Mycoplasma/Spiroplasma code\n  5   Invertebrate mitochondrial\n  6   Ciliate, Dasycladacean and Hexamita nuclear code\n  9   Echinoderm and Flatworm mitochondrial code\n  10  Euplotid nuclear code\n  11  Bacterial, archaeal and plant plastid code ( Default )\n  12  Alternative yeast nuclear code\n  13  Ascidian mitochondrial code\n  14  Alternative flatworm mitochondrial code\n  15  Blepharisma nuclear code\n  16  Chlorophycean mitochondrial code\n  21  Trematode mitochondrial code\n  22  Scenedesmus obliquus mitochondrial code\n  23  Thraustochytrium mitochondrial code\n";
 	print "[--genus (STRING)] Genus name of the strain ( Default 'NA' )\n";
 	print "[--species (STRING)] Species name of the strain ( Default 'NA' )\n";
@@ -3207,34 +3362,39 @@ sub printCoreTree{
 	print "[-aS (FLOAT)] Alignment coverage for the shorter sequence. If set to 0.9, the alignment must covers 90% of the sequence ( Default 0.7 )\n";
 	print "[-g (INT)] If set to 0, a sequence is clustered to the first cluster that meets the threshold (fast cluster). If set to 1, the program will cluster it into the most similar cluster that meets the threshold (accurate but slow mode, Default 1)\n";
 	print "[-d (INT)] length of description in .clstr file. if set to 0, it takes the fasta defline and stops at first space ( Default 0 )\n";
+	print "[--fasttree] Use FastTree to construct phylogenetic tree quickly instead of the combination of Modeltest-ng and Raxml-ng\n";
+	print "[--bsnum (INT)] Replicates for bootstrap of IQ-TREE ( Default 500 )\n\n";
 	print "[--threads (INT)] Number of threads to be used ( Default 4 )\n";
 }
 
 sub printPan{
-	print "[--AAsPath (PATH)] Amino acids of all strains as fasta file paths, ( Default './Results/Annotations/AAs' )\n";
 	print "[--GffPath (PATH)] Gff files of all strains as paths ( Default './Results/Annotations/GFF' )\n";
 	print "[--codon (INT)] Translation table ( Default 11 )\n  1   Universal code\n  2   Vertebrate mitochondrial code\n  3   Yeast mitochondrial code\n  4   Mold, Protozoan, and Coelenterate Mitochondrial code and Mycoplasma/Spiroplasma code\n  5   Invertebrate mitochondrial\n  6   Ciliate, Dasycladacean and Hexamita nuclear code\n  9   Echinoderm and Flatworm mitochondrial code\n  10  Euplotid nuclear code\n  11  Bacterial, archaeal and plant plastid code ( Default )\n  12  Alternative yeast nuclear code\n  13  Ascidian mitochondrial code\n  14  Alternative flatworm mitochondrial code\n  15  Blepharisma nuclear code\n  16  Chlorophycean mitochondrial code\n  21  Trematode mitochondrial code\n  22  Scenedesmus obliquus mitochondrial code\n  23  Thraustochytrium mitochondrial code\n";
 	print "[--strain_num (INT)] The total number of strains used for analysis, not including the reference genome\n";
 	print "[--PanTree] Construct a phylogenetic tree of single-copy core proteins called by roary\n";
 	print "[--threads (INT)] Number of threads to be used ( Default 4 )\n";
+	print "[--identi (INT)] Minimum percentage identity for blastp ( Default 95 )\n";
+	print "[--fasttree] Use FastTree to construct phylogenetic tree quickly instead of the combination of Modeltest-ng and Raxml-ng\n";
+	print "[--bsnum (INT)] Replicates for bootstrap of IQ-TREE ( Default 500 )\n\n";
 }
 
 sub printOrthoF{
 	print "[--AAsPath (PATH)] Amino acids of all strains as fasta file paths, ( Default './Results/Annotations/AAs' )\n";
-	print "[--Sprogram (STRING)] Sequence search program, Options: blast, mmseqs, blast_gz, diamond ( Default blast )\n";
+	print "[--Sprogram (STRING)] Sequence search program, Options: blast, mmseqs, blast_gz, diamond ( Default diamond )\n";
 	print "[--threads (INT)] Number of threads to be used ( Default 4 )\n";
+	print "[--fasttree] Use FastTree to construct phylogenetic tree quickly instead of the combination of Modeltest-ng and Raxml-ng\n";
+	print "[--bsnum (INT)] Replicates for bootstrap of IQ-TREE ( Default 500 )\n\n";
 }
 
 sub printANI{
 	print "[--queryL (FILE)] The file containing full paths to query genomes, one per line ( Default scaf.list )\n";
 	print "[--refL (FILE)] The file containing full paths to reference genomes, one per line. ( Default scaf.list )\n";
-	print "[--ANIO (FILE)] The name of output file ( Default 'Results/ANI/ANIs' )\n";
 	print "[--threads (INT)] Number of threads to be used ( Default 4 )\n";
 }
 
 sub printMASH{
 	print "[--scafPath (PATH)] Path for contigs/scaffolds ( Default 'Results/Assembles/Scaf/Illumina' )\n";
-	print "[--Scaf_suffix (STRING)] The suffix of scaffolds or genomes. Here, '-8.fa' for Illumina data, '.contigs.fasta' for PacBio data and Oxford data. Users can also fill in other suffixes according to the actual situation ( Default -8.fa )\n";
+	print "[--Scaf_suffix (STRING)] The suffix of scaffolds or genome files. Users should set the suffixes according to the actual situation ( Default -8.fa )\n";
 	print "[--threads (INT)] Number of threads to be used ( Default 4 )\n";
 }
 
@@ -3255,11 +3415,12 @@ sub printVAR{
 	print "[--tree_builder (STRING)] Application to use for tree building [raxml|fasttree|hybrid] ( Default fasttree )\n";
 	print "[--threads (INT)] Number of threads to be used ( Default 4 )\n";
 	print "[--iterations (INT)] Maximum No. of iterations for gubbins ( Default 5 )\n";
+	print "[--bsnum (INT)] Replicates for bootstrap of IQ-TREE ( Default 500 )\n\n";
 }
 
 sub printAntiRes{
 	print "[--scafPath (PATH)] Path for contigs/scaffolds ( Default 'Results/Assembles/Scaf/Illumina' )\n";
-	print "[--Scaf_suffix (STRING)] The suffix of scaffolds or genomes. Here, '-8.fa' for Illumina data, '.contigs.fasta' for PacBio data and Oxford data. Users can also fill in other suffixes according to the actual situation ( Default -8.fa )\n";
+	print "[--Scaf_suffix (STRING)] The suffix of scaffolds or genome files. Users should set the suffixes according to the actual situation ( Default -8.fa )\n";
 	print "[--db (STRING)]> The database to use, options: argannot, card, ecoh, ecoli_vf, ncbi, plasmidfinder, resfinder and vfdb. ( Default ncbi )\n";
 	print "[--identity (INT)] Minimum %identity to keep the result, should be a number between 1 to 100. ( Default 75 )\n";
 	print "[--coverage (INT)] Minimum %coverage to keep the result, should be a number between 0 to 100. ( Default 50 )\n";
@@ -3275,12 +3436,13 @@ sub printpCOG{
 sub printSTREE{
 	print "[--seqfile (STRING)] Path of the sequence file for analysis.\n";
 	print "[--seqtype (STRING)] Type Of Sequence (p, d, c for Protein, DNA, Codons, respectively). ( Default p )\n";
-	print "[--bsnum (INT)] Times for bootstrap. ( Default 1000 )\n\n";
+	print "[--threads (INT)] Number of threads to be used ( Default 4 )\n";
+	print "[--bsnum (INT)] Replicates for bootstrap of IQ-TREE ( Default 500 )\n\n";
 }
 
 sub printACC{
 	print "Applets in ACC include 'Assess' now\n";
-	print "Parameters for Assess include the following:\n    [--scafPath (PATH)] Path for contigs/scaffolds ( Default 'Results/Assembles/Scaf/Illumina' )\n    [--Scaf_suffix (STRING)] The suffix of scaffolds or genomes ( Default -8.fa )\n    [--filter_length (INT)] Sequences shorter than the 'filter_length' will be deleted from the assembled genomes. ( Default 200 )\n\n";
+	print "Parameters for Assess include the following:\n    [--scafPath (PATH)] Path for contigs/scaffolds ( Default 'Results/Assembles/Scaf/Illumina' )\n    [--Scaf_suffix (STRING)] The suffix of scaffolds or genome files ( Default -8.fa )\n    [--filter_length (INT)] Sequences shorter than the 'filter_length' will be deleted from the assembled genomes. ( Default 200 )\n\n";
 }
 
 sub printExamples{
@@ -3310,23 +3472,47 @@ sub printExamples{
 
 	print "Example 6: Constructing the phylogenetic trees of single-copy core proteins and core SNPs\n\n";
 
-	print "         pgcgap --CoreTree --CDsPath <PATH> --AAsPath <PATH> --codon <INT> --strain_num <INT> --threads <INT>\n\n";
+	print "         # Construct phylogenetic tree with FastTree (Quick without best fit model testing)\n";
+
+	print "         pgcgap --CoreTree --CDsPath <PATH> --AAsPath <PATH> --codon <INT> --strain_num <INT> --threads <INT> --fasttree\n\n";
+
+	print "         # Construct phylogenetic tree with IQ-TREE (Slow with best fit model testing)\n";
+
+	print "         pgcgap --CoreTree --CDsPath <PATH> --AAsPath <PATH> --codon <INT> --strain_num <INT> --threads <INT> --bsnum <INT>\n\n";
 
 	print "Example 7: Constructing a single-copy core protein tree only.\n\n";
 
-	print "         pgcgap --CoreTree --CDsPath NO --AAsPath <PATH> --codon <INT> --strain_num <INT> --threads <INT>\n\n";
+	print "         # Construct phylogenetic tree with FastTree (Quick without best fit model testing)\n";
+
+	print "         pgcgap --CoreTree --CDsPath NO --AAsPath <PATH> --codon <INT> --strain_num <INT> --threads <INT> --fasttree\n\n";
+
+	print "         # Construct phylogenetic tree with IQ-TREE (Slow with best fit model testing)\n";
+
+	print "         pgcgap --CoreTree --CDsPath NO --AAsPath <PATH> --codon <INT> --strain_num <INT> --threads <INT> --bsnum <INT>\n\n";
 
 	print "Example 8: Conduct pan-genome analysis and construct a phylogenetic tree of single-copy core proteins called by roary.\n\n";
 
-	print "         pgcgap --Pan --codon <INT> --strain_num <INT> --threads <INT> --GffPath <PATH> --PanTree --AAsPath <PATH>\n\n";
+	print "         # Construct phylogenetic tree with FastTree (Quick without best fit model testing)\n";
 
-	print "Example 9: Inference of orthologous gene groups\n\n";
+	print "         pgcgap --Pan --codon <INT> --strain_num <INT> --threads <INT> --identi <INT> --GffPath <PATH> --PanTree --fasttree\n\n";
 
-	print "         pgcgap --OrthoF --threads <INT> --AAsPath <PATH>\n\n";
+	print "         # Construct phylogenetic tree with IQ-TREE (Slow with best fit model testing)\n";
+
+	print "         pgcgap --Pan --codon <INT> --strain_num <INT> --threads <INT> --identi <INT> --GffPath <PATH> --PanTree --bsnum <INT>\n\n";
+
+	print "Example 9: Inference of orthologous gene groups and construct a phylogenetic tree of single-copy Orthologue proteins\n\n";
+
+	print "         # Construct phylogenetic tree with FastTree (Quick without best fit model testing)\n";
+
+	print "         pgcgap --OrthoF --threads <INT> --AAsPath <PATH> --fasttree\n\n";
+
+	print "         # Construct phylogenetic tree with IQ-TREE (Slow with best fit model testing)\n";
+
+	print "         pgcgap --OrthoF --threads <INT> --AAsPath <PATH> --bsnum <INT>\n\n";
 
 	print "Example 10: Compute whole-genome Average Nucleotide Identity (ANI)\n\n";
 
-	print "         pgcgap --ANI --threads <INT> --queryL <FILE> --refL <FILE> --ANIO <STRING> --Scaf_suffix <STRING>\n\n";
+	print "         pgcgap --ANI --threads <INT> --queryL <FILE> --refL <FILE> --Scaf_suffix <STRING>\n\n";
 
 	print "Example 11: Genome and metagenome similarity estimation using MinHash\n\n";
 
@@ -3338,7 +3524,7 @@ sub printExamples{
 
 	print "Example 13: Variants calling and phylogenetic tree construction based on a reference genome\n\n";
 
-	print "         pgcgap --VAR --threads <INT> --refgbk <FILE with full path> --ReadsPath <PATH> --reads1 <STRING> --reads2 <STRING> --suffix_len <INT> --strain_num <INT> --qualtype <STRING>\n\n";
+	print "         pgcgap --VAR --threads <INT> --refgbk <FILE with full path> --ReadsPath <PATH> --reads1 <STRING> --reads2 <STRING> --suffix_len <INT> --strain_num <INT> --qualtype <STRING> --bsnum <INT>\n\n";
 
 	print "Example 14: Screening of contigs for antimicrobial and virulence genes\n\n";
 
@@ -3346,7 +3532,7 @@ sub printExamples{
 
 	print "Example 15: Construct a phylogenetic tree based on multiple sequences in one file\n\n";
 
-	print "         pgcgap --STREE --seqfile <PATH> --seqtype <p|d|c> --bsnum <INT>\n\n";
+	print "         pgcgap --STREE --seqfile <PATH> --seqtype <p|d|c> --bsnum <INT> --threads <INT>\n\n";
 
 	print "Example 16: Perform the short sequences filter from the assembled genome and get the genome status\n\n";
 

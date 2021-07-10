@@ -1,7 +1,7 @@
 # PGCGAP - the Prokaryotic Genomics and Comparative Genomics Analysis Pipeline
 ![Platform](https://badgen.net/badge/platform/WSL,Linux,macOS?list=|)
 ![License](https://badgen.net/github/license/liaochenlanruo/pgcgap)
-[![GitHubversion](https://badge.fury.io/gh/liaochenlanruo%2Fpgcgap.svg)](https://badge.fury.io/gh/liaochenlanruo%2Fpgcgap)
+[![Version](https://anaconda.org/bioconda/pgcgap/badges/version.svg)](https://anaconda.org/bioconda/pgcgap)
 ![Downloads conda](https://img.shields.io/conda/dn/bioconda/pgcgap.svg?style=flat)
 [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/pgcgap/README.html)
 
@@ -80,7 +80,6 @@ $docker pull quay.io/biocontainers/pgcgap:<tag>
 - [IQ-TREE](http://www.iqtree.org/)
 - [Mafft](https://mafft.cbrc.jp/alignment/software/)
 - [Mash](https://github.com/marbl/Mash)
-- [ModelTest-NG](https://github.com/ddarriba/modeltest)
 - [Mmseqs2](https://github.com/soedinglab/mmseqs2)
 - [Muscle](https://www.ebi.ac.uk/Tools/msa/muscle/)
 - [NCBI-blast+](https://blast.ncbi.nlm.nih.gov/Blast.cgi?CMD=Web&PAGE_TYPE=BlastDocs&DOC_TYPE=Download)
@@ -107,11 +106,11 @@ $docker pull quay.io/biocontainers/pgcgap:<tag>
   - [gplots](https://cran.r-project.org/web/packages/gplots/)
   - [pheatmap](https://cran.r-project.org/web/packages/pheatmap/index.html)
   - [plotrix](https://cran.r-project.org/web/packages/plotrix/)
-- [RAxML-NG](https://github.com/amkozlov/raxml-ng)
 - [Roary](https://sanger-pathogens.github.io/Roary/)
 - [Sickle-trim](https://github.com/najoshi/sickle)
 - [Snippy](https://github.com/tseemann/snippy)
 - [Snp-sites](https://github.com/sanger-pathogens/snp-sites)
+- [trimAL](http://trimal.cgenomics.org/)
 - [unicycler](https://github.com/rrwick/Unicycler)
 - [wget](https://www.gnu.org/software/wget/)
 
@@ -126,7 +125,7 @@ Please report any issues to the [issues page](https://github.com/liaochenlanruo/
 
 ## Citation
 
-If you use this software please cite: Liu H, Xin B, Zheng J, Zhong H, Yu Y, Peng D, Sun M. Build a bioinformatics analysis platform and apply it to routine analysis of microbial genomics and comparative genomics. *Protocol exchange*, 2020. DOI: [10.21203/rs.2.21224/v2](https://dx.doi.org/10.21203/rs.2.21224/v2)
+If you use this software please cite: Liu H, Xin B, Zheng J, Zhong H, Yu Y, Peng D, Sun M. Build a bioinformatics analysis platform and apply it to routine analysis of microbial genomics and comparative genomics. *Protocol exchange*, 2021. DOI: [10.21203/rs.2.21224/v5](https://doi.org/10.21203/rs.2.21224/v5)
 
 
 ## Usages
